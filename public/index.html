@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hacker Terminal</title>
 
 <style>
@@ -15,9 +16,12 @@ body {
 
 #terminal {
   padding: 10px;
+  padding-bottom: 60px; /* Platz für die Eingabezeile unten */
   height: 100vh;
   overflow-y: auto;
+  box-sizing: border-box;
   white-space: pre-wrap;
+  scroll-behavior: smooth; /* Sanftes Scrollen */
 }
 
 #inputLine {
@@ -26,22 +30,61 @@ body {
   left: 0;
   width: 100%;
   display: flex;
-  padding: 10px;
+  align-items: center;
+  padding: 15px;
+  background: black; /* Verdeckt alten Text beim Scrollen */
   box-sizing: border-box;
+  border-top: 1px solid #004400;
 }
 
 #prompt {
-  margin-right: 5px;
+  margin-right: 10px;
+  font-size: 16px;
+}
+
+/* Container für den Custom-Cursor */
+.input-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 #input {
-  flex: 1;
+  width: 100%;
   background: transparent;
   border: none;
   outline: none;
   color: #00ff00;
   font-family: monospace;
-  font-size: 14px;
+  font-size: 16px;
+  caret-color: transparent; /* Versteckt den Standard-Mauszeiger */
+}
+
+/* Der dicke, blinkende Hacker-Cursor */
+#cursor {
+  position: absolute;
+  left: 0;
+  width: 10px;
+  height: 18px;
+  background-color: #00ff00;
+  animation: blink 0.8s infinite;
+  pointer-events: none;
+  display: inline-block;
+}
+
+@keyframes blink {
+  0%, 49% { background-color: #00ff00; }
+  50%, 100% { background-color: transparent; }
+}
+
+#input:disabled {
+  color: #004400;
+  cursor: not-allowed;
+}
+
+#input:disabled + #cursor {
+  background-color: #004400; /* Cursor wird dunkel, wenn gesperrt */
 }
 </style>
 </head>
@@ -52,20 +95,52 @@ body {
 
 <div id="inputLine">
   <span id="prompt">></span>
-  <input id="input" type="text" disabled />
+  <div class="input-container">
+    <input id="input" type="text" placeholder="[STRG drücken für PIN-Eingabe]" disabled />
+    <span id="cursor"></span>
+  </div>
 </div>
 
 <script>
 const terminal = document.getElementById("terminal");
 const input = document.getElementById("input");
+const cursor = document.getElementById("cursor");
 
 let ws;
 let unlocked = false;
+let ctrlUsed = false;
 
+// Text hinzufügen und SOFORT automatisch ganz nach unten scrollen
 function add(text) {
   terminal.innerHTML += text + "\n";
-  terminal.scrollTop = terminal.scrollHeight;
+  
+  // Erzwingt das Scrollen zum neuesten Inhalt
+  setTimeout(() => {
+    terminal.scrollTop = terminal.scrollHeight;
+  }, 10);
 }
+
+// Positioniert den dicken Hacker-Cursor exakt hinter dem Text
+function updateCursorPosition() {
+  // Erstellt ein unsichtbares Element, um die Textbreite zu messen
+  const text = input.value;
+  const helper = document.createElement("span");
+  helper.style.font = window.getComputedStyle(input).font;
+  helper.style.visibility = "hidden";
+  helper.style.whiteSpace = "pre";
+  helper.textContent = text;
+  document.body.appendChild(helper);
+  
+  const textWidth = helper.getBoundingClientRect().width;
+  document.body.removeChild(helper);
+  
+  // Setzt den Cursor an das Ende des geschriebenen Textes
+  cursor.style.left = textWidth + "px";
+}
+
+// Event-Listener für Tastatureingaben, um den Cursor mitzubewegen
+input.addEventListener("input", updateCursorPosition);
+window.addEventListener("resize", updateCursorPosition);
 
 function connect() {
   ws = new WebSocket(location.origin.replace("http", "ws"));
@@ -84,35 +159,45 @@ function connect() {
     if (data.type === "unlocked") {
       unlocked = true;
       input.disabled = false;
+      input.placeholder = "Befehl eingeben...";
       input.focus();
-      add("[SYSTEM] Zugriff erlaubt");
+      updateCursorPosition();
+      add("[SYSTEM] Zugriff erlaubt. Sie können jetzt schreiben.");
     }
 
     if (data.type === "error") {
-      add("[SYSTEM] Falscher PIN");
+      add("[SYSTEM] Falscher PIN. Zugriff verweigert.");
+      ctrlUsed = false;
     }
 
     if (data.type === "reset") {
       terminal.innerHTML = "";
     }
   };
+
+  ws.onclose = () => {
+    add("[SYSTEM] Verbindung verloren. Verbinde neu...");
+    setTimeout(connect, 3000);
+  };
 }
 
 connect();
 
-/* PIN nur einmal beim ersten CTRL */
-let ctrlUsed = false;
-
+/* PIN-Abfrage über STRG */
 document.addEventListener("keydown", (e) => {
   if (e.key === "Control" && !ctrlUsed) {
     ctrlUsed = true;
 
     const pin = prompt("PIN eingeben:");
-    ws.send(JSON.stringify({ type: "pin", pin }));
+    if (pin) {
+      ws.send(JSON.stringify({ type: "pin", pin }));
+    } else {
+      ctrlUsed = false;
+    }
   }
 });
 
-/* Eingabe senden */
+/* Eingabe absenden */
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     const text = input.value.trim();
@@ -125,6 +210,14 @@ input.addEventListener("keydown", (e) => {
     }
 
     input.value = "";
+    setTimeout(updateCursorPosition, 10);
+  }
+});
+
+// Fokus beim Klicken auf die Zeile erzwingen
+document.getElementById("inputLine").addEventListener("click", () => {
+  if (!input.disabled) {
+    input.focus();
   }
 });
 </script>
