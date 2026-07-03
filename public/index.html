@@ -21,7 +21,7 @@ body {
   overflow-y: auto;
   box-sizing: border-box;
   white-space: pre-wrap;
-  scroll-behavior: smooth; /* Sanftes Scrollen */
+  scroll-behavior: smooth;
 }
 
 #inputLine {
@@ -42,7 +42,6 @@ body {
   font-size: 16px;
 }
 
-/* Container für den Custom-Cursor */
 .input-container {
   flex: 1;
   position: relative;
@@ -61,7 +60,6 @@ body {
   caret-color: transparent; /* Versteckt den Standard-Mauszeiger */
 }
 
-/* Der dicke, blinkende Hacker-Cursor */
 #cursor {
   position: absolute;
   left: 0;
@@ -84,7 +82,7 @@ body {
 }
 
 #input:disabled + #cursor {
-  background-color: #004400; /* Cursor wird dunkel, wenn gesperrt */
+  background-color: #004400;
 }
 </style>
 </head>
@@ -110,19 +108,68 @@ let ws;
 let unlocked = false;
 let ctrlUsed = false;
 
-// Text hinzufügen und SOFORT automatisch ganz nach unten scrollen
+// Funktion zum Hinzufügen von Text und automatischem Scrollen
 function add(text) {
   terminal.innerHTML += text + "\n";
-  
-  // Erzwingt das Scrollen zum neuesten Inhalt
   setTimeout(() => {
     terminal.scrollTop = terminal.scrollHeight;
   }, 10);
 }
 
+// Funktion für den automatischen Download mit englischem Datum & Zeitformat
+function downloadAndReset() {
+  const textContent = terminal.innerText;
+  
+  if (!textContent.trim()) return; // Falls leer, nichts tun
+
+  const jetzt = new Date();
+  
+  // Englisches Datumsformat (z.B. "07/03/2026")
+  const optionsDatum = { month: '2-digit', day: '2-digit', year: 'numeric' };
+  let englischesDatum = jetzt.toLocaleDateString('en-US', optionsDatum);
+  // Ersetzt Schrägstriche durch Bindestriche für den Dateinamen -> "07-03-2026"
+  englischesDatum = englischesDatum.replace(/\//g, '-');
+
+  // Englische Uhrzeit (z.B. "11:59:50 PM")
+  const optionsZeit = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+  let englischeZeit = jetzt.toLocaleTimeString('en-US', optionsZeit);
+  // Ersetzt Doppelpunkte und Leerzeichen durch Unterstriche -> "11_59_50_PM"
+  englischeZeit = englischeZeit.replace(/[: ]/g, '_');
+  
+  // Kombiniert Datum und Uhrzeit
+  const dateiname = `${englischesDatum}_${englischeZeit}.txt`;
+
+  // Download-Link im Hintergrund generieren
+  const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = dateiname;
+  
+  // Klick simulieren
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  // Terminal nach dem Download leeren
+  terminal.innerHTML = "";
+  add("[SYSTEM] Automatischer täglicher Export abgeschlossen. Terminal zurückgesetzt.");
+}
+
+// Überprüft jede Sekunde die Uhrzeit für den Trigger
+setInterval(() => {
+  const jetzt = new Date();
+  const stunden = jetzt.getHours();
+  const minuten = jetzt.getMinutes();
+  const sekunden = jetzt.getSeconds();
+
+  // Exakt bei 23:59:50 Uhr wird die Funktion ausgeführt
+  if (stunden === 23 && minuten === 59 && sekunden === 50) {
+    downloadAndReset();
+  }
+}, 1000);
+
 // Positioniert den dicken Hacker-Cursor exakt hinter dem Text
 function updateCursorPosition() {
-  // Erstellt ein unsichtbares Element, um die Textbreite zu messen
   const text = input.value;
   const helper = document.createElement("span");
   helper.style.font = window.getComputedStyle(input).font;
@@ -134,11 +181,9 @@ function updateCursorPosition() {
   const textWidth = helper.getBoundingClientRect().width;
   document.body.removeChild(helper);
   
-  // Setzt den Cursor an das Ende des geschriebenen Textes
   cursor.style.left = textWidth + "px";
 }
 
-// Event-Listener für Tastatureingaben, um den Cursor mitzubewegen
 input.addEventListener("input", updateCursorPosition);
 window.addEventListener("resize", updateCursorPosition);
 
@@ -214,7 +259,6 @@ input.addEventListener("keydown", (e) => {
   }
 });
 
-// Fokus beim Klicken auf die Zeile erzwingen
 document.getElementById("inputLine").addEventListener("click", () => {
   if (!input.disabled) {
     input.focus();
