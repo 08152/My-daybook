@@ -20,9 +20,34 @@ body {
   white-space: pre-wrap;
 }
 
+#inputLine {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+#prompt {
+  color: #00ff00;
+  margin-right: 5px;
+}
+
+#input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #00ff00;
+  font-family: monospace;
+  font-size: 14px;
+}
+
 #status {
   position: fixed;
-  bottom: 5px;
+  top: 5px;
   left: 10px;
   font-size: 12px;
   opacity: 0.6;
@@ -32,15 +57,26 @@ body {
 
 <body>
 
+<div id="status">CTRL + PIN erforderlich</div>
 <div id="terminal"></div>
-<div id="status">CTRL + Tippen | PIN erforderlich</div>
+
+<div id="inputLine">
+  <span id="prompt">></span>
+  <input id="input" type="text" disabled />
+</div>
 
 <script>
 const terminal = document.getElementById("terminal");
+const input = document.getElementById("input");
 
-let ctrl = false;
 let ws;
 let unlocked = false;
+let ctrl = false;
+
+function addLine(text) {
+  terminal.innerHTML += text + "\n";
+  terminal.scrollTop = terminal.scrollHeight;
+}
 
 function connect() {
   ws = new WebSocket(location.origin.replace("http", "ws"));
@@ -49,16 +85,21 @@ function connect() {
     const data = JSON.parse(msg.data);
 
     if (data.type === "init") {
-      data.lines.forEach(l => add(l.text));
+      data.lines.forEach(l => addLine(l.text));
     }
 
     if (data.type === "line") {
-      add(data.text);
+      addLine(data.text);
     }
 
     if (data.type === "unlocked") {
       unlocked = true;
-      add("[SYSTEM] Zugriff erlaubt");
+      input.disabled = false;
+      addLine("[SYSTEM] Zugriff gewährt");
+    }
+
+    if (data.type === "error") {
+      addLine("[SYSTEM] Falscher PIN");
     }
 
     if (data.type === "reset") {
@@ -67,34 +108,36 @@ function connect() {
   };
 }
 
-function add(t) {
-  terminal.innerHTML += t + "\n";
-  terminal.scrollTop = terminal.scrollHeight;
-}
-
 connect();
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Control") ctrl = true;
+  if (e.key === "Control") {
+    ctrl = true;
 
-  if (ctrl && !unlocked) {
-    const pin = prompt("PIN eingeben:");
-    ws.send(JSON.stringify({ type: "pin", pin }));
-  }
-
-  if (ctrl && unlocked) {
-    if (e.key.length === 1) {
-      ws.send(JSON.stringify({ type: "line", text: "> " + e.key }));
-    }
-
-    if (e.key === "Enter") {
-      ws.send(JSON.stringify({ type: "line", text: "" }));
+    if (!unlocked) {
+      const pin = prompt("PIN eingeben:");
+      ws.send(JSON.stringify({ type: "pin", pin }));
     }
   }
 });
 
 document.addEventListener("keyup", (e) => {
   if (e.key === "Control") ctrl = false;
+});
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const text = input.value.trim();
+
+    if (text.length > 0 && unlocked) {
+      ws.send(JSON.stringify({
+        type: "line",
+        text: "> " + text
+      }));
+    }
+
+    input.value = "";
+  }
 });
 </script>
 
