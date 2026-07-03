@@ -16,12 +16,41 @@ body {
 
 #terminal {
   padding: 10px;
-  padding-bottom: 60px; /* Platz für die Eingabezeile unten */
+  padding-top: 50px; /* Platz für die obere Touch-Zone */
+  padding-bottom: 110px; /* Platz für die untere Touch-Zone und Eingabezeile */
   height: 100vh;
   overflow-y: auto;
   box-sizing: border-box;
   white-space: pre-wrap;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch; /* Sanftes Scrollen auf iOS */
+}
+
+/* Touchscreen Scroll-Zonen */
+.scroll-zone {
+  position: fixed;
+  left: 0;
+  width: 100%;
+  height: 45px;
+  background: rgba(0, 255, 0, 0.03); /* Minimal sichtbar als Orientierung */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 12px;
+  color: #004400;
+  user-select: none;
+  cursor: pointer;
+  z-index: 10;
+}
+
+#scrollUp {
+  top: 0;
+  border-bottom: 1px dashed #002200;
+}
+
+#scrollDown {
+  bottom: 60px; /* Direkt über der Eingabezeile */
+  border-top: 1px dashed #002200;
 }
 
 #inputLine {
@@ -32,9 +61,10 @@ body {
   display: flex;
   align-items: center;
   padding: 15px;
-  background: black; /* Verdeckt alten Text beim Scrollen */
+  background: black;
   box-sizing: border-box;
   border-top: 1px solid #004400;
+  z-index: 20;
 }
 
 #prompt {
@@ -57,7 +87,7 @@ body {
   color: #00ff00;
   font-family: monospace;
   font-size: 16px;
-  caret-color: transparent; /* Versteckt den Standard-Mauszeiger */
+  caret-color: transparent;
 }
 
 #cursor {
@@ -89,6 +119,10 @@ body {
 
 <body>
 
+<!-- Touch-Zonen für Touchscreen-Bedienung -->
+<div id="scrollUp" class="scroll-zone">▲ SCROLL UP ▲</div>
+<div id="scrollDown" class="scroll-zone">▼ SCROLL DOWN ▼</div>
+
 <div id="terminal"></div>
 
 <div id="inputLine">
@@ -103,10 +137,13 @@ body {
 const terminal = document.getElementById("terminal");
 const input = document.getElementById("input");
 const cursor = document.getElementById("cursor");
+const scrollUpBtn = document.getElementById("scrollUp");
+const scrollDownBtn = document.getElementById("scrollDown");
 
 let ws;
 let unlocked = false;
 let ctrlUsed = false;
+let scrollInterval;
 
 // Funktion zum Hinzufügen von Text und automatischem Scrollen
 function add(text) {
@@ -116,41 +153,60 @@ function add(text) {
   }, 10);
 }
 
+// Touchscreen Scroll-Logik (Draufdrücken hält das Scrollen aktiv)
+function startScrolling(direction) {
+  clearInterval(scrollInterval);
+  scrollInterval = setInterval(() => {
+    terminal.scrollBy({
+      top: direction * 40,
+      behavior: 'auto'
+    });
+  }, 40);
+}
+
+function stopScrolling() {
+  clearInterval(scrollInterval);
+}
+
+// Event Listener für Touch-Geräte und Maus-Klicks (Scrollen)
+scrollUpBtn.addEventListener("touchstart", (e) => { e.preventDefault(); startScrolling(-1); });
+scrollUpBtn.addEventListener("touchend", stopScrolling);
+scrollUpBtn.addEventListener("mousedown", () => startScrolling(-1));
+scrollUpBtn.addEventListener("mouseup", stopScrolling);
+scrollUpBtn.addEventListener("mouseleave", stopScrolling);
+
+scrollDownBtn.addEventListener("touchstart", (e) => { e.preventDefault(); startScrolling(1); });
+scrollDownBtn.addEventListener("touchend", stopScrolling);
+scrollDownBtn.addEventListener("mousedown", () => startScrolling(1));
+scrollDownBtn.addEventListener("mouseup", stopScrolling);
+scrollDownBtn.addEventListener("mouseleave", stopScrolling);
+
 // Funktion für den automatischen Download mit englischem Datum & Zeitformat
 function downloadAndReset() {
   const textContent = terminal.innerText;
   
-  if (!textContent.trim()) return; // Falls leer, nichts tun
+  if (!textContent.trim()) return;
 
   const jetzt = new Date();
-  
-  // Englisches Datumsformat (z.B. "07/03/2026")
   const optionsDatum = { month: '2-digit', day: '2-digit', year: 'numeric' };
   let englischesDatum = jetzt.toLocaleDateString('en-US', optionsDatum);
-  // Ersetzt Schrägstriche durch Bindestriche für den Dateinamen -> "07-03-2026"
   englischesDatum = englischesDatum.replace(/\//g, '-');
 
-  // Englische Uhrzeit (z.B. "11:59:50 PM")
   const optionsZeit = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
   let englischeZeit = jetzt.toLocaleTimeString('en-US', optionsZeit);
-  // Ersetzt Doppelpunkte und Leerzeichen durch Unterstriche -> "11_59_50_PM"
   englischeZeit = englischeZeit.replace(/[: ]/g, '_');
   
-  // Kombiniert Datum und Uhrzeit
   const dateiname = `${englischesDatum}_${englischeZeit}.txt`;
 
-  // Download-Link im Hintergrund generieren
   const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = dateiname;
   
-  // Klick simulieren
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 
-  // Terminal nach dem Download leeren
   terminal.innerHTML = "";
   add("[SYSTEM] Automatischer täglicher Export abgeschlossen. Terminal zurückgesetzt.");
 }
@@ -162,7 +218,6 @@ setInterval(() => {
   const minuten = jetzt.getMinutes();
   const sekunden = jetzt.getSeconds();
 
-  // Exakt bei 23:59:50 Uhr wird die Funktion ausgeführt
   if (stunden === 23 && minuten === 59 && sekunden === 50) {
     downloadAndReset();
   }
@@ -268,3 +323,4 @@ document.getElementById("inputLine").addEventListener("click", () => {
 
 </body>
 </html>
+
