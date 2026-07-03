@@ -31,7 +31,6 @@ body {
 }
 
 #prompt {
-  color: #00ff00;
   margin-right: 5px;
 }
 
@@ -44,20 +43,11 @@ body {
   font-family: monospace;
   font-size: 14px;
 }
-
-#status {
-  position: fixed;
-  top: 5px;
-  left: 10px;
-  font-size: 12px;
-  opacity: 0.6;
-}
 </style>
 </head>
 
 <body>
 
-<div id="status">CTRL + PIN erforderlich</div>
 <div id="terminal"></div>
 
 <div id="inputLine">
@@ -71,9 +61,8 @@ const input = document.getElementById("input");
 
 let ws;
 let unlocked = false;
-let ctrl = false;
 
-function addLine(text) {
+function add(text) {
   terminal.innerHTML += text + "\n";
   terminal.scrollTop = terminal.scrollHeight;
 }
@@ -85,21 +74,22 @@ function connect() {
     const data = JSON.parse(msg.data);
 
     if (data.type === "init") {
-      data.lines.forEach(l => addLine(l.text));
+      data.lines.forEach(l => add(l.text));
     }
 
     if (data.type === "line") {
-      addLine(data.text);
+      add(data.text);
     }
 
     if (data.type === "unlocked") {
       unlocked = true;
       input.disabled = false;
-      addLine("[SYSTEM] Zugriff gewährt");
+      input.focus();
+      add("[SYSTEM] Zugriff erlaubt");
     }
 
     if (data.type === "error") {
-      addLine("[SYSTEM] Falscher PIN");
+      add("[SYSTEM] Falscher PIN");
     }
 
     if (data.type === "reset") {
@@ -110,26 +100,24 @@ function connect() {
 
 connect();
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Control") {
-    ctrl = true;
+/* PIN nur einmal beim ersten CTRL */
+let ctrlUsed = false;
 
-    if (!unlocked) {
-      const pin = prompt("PIN eingeben:");
-      ws.send(JSON.stringify({ type: "pin", pin }));
-    }
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Control" && !ctrlUsed) {
+    ctrlUsed = true;
+
+    const pin = prompt("PIN eingeben:");
+    ws.send(JSON.stringify({ type: "pin", pin }));
   }
 });
 
-document.addEventListener("keyup", (e) => {
-  if (e.key === "Control") ctrl = false;
-});
-
+/* Eingabe senden */
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     const text = input.value.trim();
 
-    if (text.length > 0 && unlocked) {
+    if (text && unlocked) {
       ws.send(JSON.stringify({
         type: "line",
         text: "> " + text
